@@ -1,0 +1,143 @@
+---
+title: "Story - 1 : Infrastructure Investment & Jobs Act Funding Allocation"
+author: "Lucas Weyrich"
+format: html
+editor: visual
+---
+
+Infrastructure Investment & Jobs Act is a bill passed by the Biden administration to support states and territories in the USA to improve the aging infrastructure, including streets, interstates, bridges, as well as rail and airport infrastructure. Below, we assess whether the allocation favors any state of voter group over another.
+
+## Load Data
+
+```{r}
+#| echo: false
+library(readxl)
+library(dplyr)
+library(tidyverse)
+library(tidycensus)
+library(ggplot2)
+
+#Read election results CSV
+election = read.csv("https://raw.githubusercontent.com/lucasweyrich958/DATA608/main/1976-2020-president.csv", stringsAsFactors = FALSE)
+#Read funding
+funding = read.csv("https://raw.githubusercontent.com/lucasweyrich958/DATA608/main/IIJA%20FUNDING%20AS%20OF%20MARCH%202023.csv")
+
+#Set Census API Key and load 2020 Census
+census_api_key("3a1a3c2d7a7eb43731b8774ad44559829725c824")
+census = get_decennial(geography = "state", variables = "P1_001N", year = 2020)
+
+#Territories is not available via package API, hence, manual file is used
+territories = read.csv("https://raw.githubusercontent.com/lucasweyrich958/DATA608/main/Territories.csv")
+```
+
+-   Election results were derived from MIT Election Lab (https://electionlab.mit.edu/data)
+
+-   Census results were derived from Bureau of the Census via api connection utilizing tidycensus
+
+    -   US Territories were added manually as they are not available via API (https://www.census.gov/programs-surveys/decennial-census/decade/2020/planning-management/release/2020-island-areas-data-products.html)
+    -   Tribal territories are likely inaccurate, and may even include double-counts with the general state counts (https://www.census.gov/library/stories/2023/10/2020-census-dhc-a-aian-population.html)
+
+## Transform and Join Data
+
+```{r}
+#Filter election df for year 2020 and also retain only winner party
+election = election %>%
+  filter(year == 2020 & (party_detailed == "DEMOCRAT" | party_detailed == "REPUBLICAN")) %>%
+  group_by(state) %>%
+  slice_max(candidatevotes, with_ties = FALSE) %>%
+  select(state, state_po, party_detailed, candidatevotes, totalvotes) 
+
+#Change column names in all dfs to match each other
+census$NAME = toupper(census$NAME)
+funding$Region = funding$State..Teritory.or.Tribal.Nation
+funding$`Total (Billions)` = funding$Total..Billions.
+census$Region = census$NAME
+census$Population = census$value
+election$Region = election$state
+census = census %>%
+  select(Region, Population)
+census = rbind(census, territories)
+
+#Join census and election with funding dfs, manually add POs for territories
+funding = funding %>%
+  left_join(census, by = 'Region') %>%
+  left_join(election, by = 'Region') %>%
+  select(Region, `Total (Billions)`, Population, state_po, party_detailed) %>%
+  mutate(state_po = case_when(
+    Region == "AMERICAN SAMOA" ~ "AS",
+    Region == "PUERTO RICO" ~ "PR",
+    Region == "NORTHERN MARIANA ISLANDS" ~ "MP",
+    Region == "GUAM" ~ "GU",
+    Region == "TRIBAL COMMUNITIES" ~ "TC",
+    Region == "US VIRGIN ISLANDS" ~ "VI",
+    is.na(state_po) ~ state_po,  # Keep existing NA values if no match
+    TRUE ~ state_po  # Keep existing values
+  ))
+
+```
+
+## Questions
+
+-   Is the allocation equitable based on the population of each of the States and Territories, or is bias apparent?
+
+-   Does the allocation favor the political interests of the Biden administration?
+
+## Visualizations
+
+```{r}
+#Calculate funding per thousand people to standardize measure
+funding = funding %>%
+  mutate(pop_fun = (`Total (Billions)` * 1e3) / (Population / 1000))
+
+fun_pop = ggplot(funding, aes(x = state_po, y = pop_fun)) + 
+  geom_bar(stat = "identity", fill = "steelblue") + 
+  labs(title = "II&J Act Funding per 1,000 People by State",
+       x = "State",
+       y = "Funding per 1,000 People (Million Dollars)") +
+  theme_minimal() + 
+  theme(panel.grid.major = element_blank())
+
+fun_pop
+```
+
+To assess whether the allocation is equitable based on the population, it necessary to somehow standardize the population measurement first. While a basic relative measurement would be sufficient (in %), assessing this question using a proportion is often more intuitive and allows us to stay in the true units. Therefore, the funding was calculated per 1,000 people. This reveals a bias toward states and territories with slim populations but large area, such as Alaska, Wyoming, or Montana. This makes sense, as I-80 flows through WY, for example, which carries a lot of the cross-country trucking traffic, requiring heavy road maintenance albeit a small population. Otherwise, it appears that the funding is allocated decently proportionally.
+
+The only questionable funding allocation is for tribal communities, but this is likely due to the lack of reliable data. While the Census provides "data for various tribes of native American and Alaskan populations" it is not clearly even stated whether these counts are also included already in the general Census counts. Hence, this measurement should be interpreted with caution.
+
+```{r}
+#Aggregate data for party plot
+party_aggregated <- funding %>%
+  group_by(party_detailed) %>%
+  summarize(Total = sum(`Total (Billions)`, pop_fun = sum(pop_fun))) %>%
+  mutate(party_detailed = replace_na(party_detailed, "Territories"))
+
+party = ggplot(party_aggregated, aes(x = party_detailed, y = Total, fill = party_detailed)) + 
+  geom_bar(stat = "identity") + 
+  labs(title = "II&J Funding by 2020 Election Results",
+       x = "Party",
+       y = "Total Funding (Billion Dollars)") +
+  theme_minimal() +
+  theme(panel.grid.major = element_blank(), legend.position = "none") +
+    scale_x_discrete(labels = c("DEMOCRAT" = "Democrat", "REPUBLICAN" = "Republican")) +
+  scale_fill_manual(values = c("DEMOCRAT" = "#429CF5", "REPUBLICAN" = "#F55E53", "Territories" = "#F5C77E"))
+party
+
+party_prop = ggplot(party_aggregated, aes(x = party_detailed, y = Total, fill = party_detailed)) + 
+  geom_bar(stat = "identity") + 
+  labs(title = "II&J Funding per 1,000 People by 2020 Election Results",
+       x = "Party",
+       y = "Funding per 1,000 People (Million Dollars)") +
+  theme_minimal() +
+  theme(panel.grid.major = element_blank(), legend.position = "none") +
+    scale_x_discrete(labels = c("DEMOCRAT" = "Democrat", "REPUBLICAN" = "Republican")) +
+  scale_fill_manual(values = c("DEMOCRAT" = "#429CF5", "REPUBLICAN" = "#F55E53", "Territories" = "#F5C77E"))
+party_prop
+
+table(funding$party_detailed)
+```
+
+Assessing whether there is a bias for the Biden administration, the funding data set was aggregated per winning party in the 2020 election. The above bar plot shows that there is a bias toward democratic states in absolute terms, about 25 billion USD more go toward democratic versus republican states. Since the number of democrat states is 26 and republican states is 25, therefore basically equal, it may give the impression that there is a bias toward the Biden administration's winning states of the 2020 election. However, plotting the same graph as a proportion of funding per 1,000 people, this time aggregated per party, shows clearly that the funding is actually almost equal. Interestingly, it seems that the funding for the territories is a lot less per 1,000 people.
+
+Territories is separated in a column, as these are not part of the president's election process.
+
+In sum, it appears that the Infrastructure Investment & Jobs Act funding is allocated relatively equal across the states based on the population of each state and territory, except for states that show significant importance in infrastructure albeit a small population, such as Wyoming. Additionally, the funding does not appear to exhibit a partisan bias, allocating almost the same amount of funding per 1,000 people (120 million USD) for both, democratic and republican states.
