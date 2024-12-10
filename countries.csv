@@ -1,0 +1,37 @@
+Country,Frequency,Relationship
+Australia,3,Ally
+Austria,1,Neutral
+Bahrain,1,Ally
+Belgium,6,Neutral
+Bolivia,3,Neutral
+Brazil,2,Competitor
+Canada,12,Ally
+Chile,1,Neutral
+China,13,Competitor
+Finland,2,Neutral
+France,1,Ally
+Georgia,1,Ally
+Germany,9,Ally
+India,2,Competitor
+Indonesia,2,Neutral
+Italy,1,Neutral
+Japan,5,Neutral
+Kazakhstan,2,Ally
+Malaysia,2,Ally
+Mexico,4,Neutral
+Morocco,2,Ally
+Norway,2,Neutral
+Peru,2,Neutral
+Philippines,2,Ally
+South Korea,4,Ally
+Russia,8,Competitor
+Saudi Arabia,1,Competitor
+Senegal,1,Neutral
+South Africa,6,Neutral
+Switzerland,1,Neutral
+Ukraine,1,Neutral
+United Arab Emirates,1,Competitor
+Vietnam,2,Ally
+Argentina,1,Neutral
+Gabon,1,Neutral
+USA,0,Self
